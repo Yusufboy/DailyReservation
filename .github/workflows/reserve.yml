@@ -52,11 +52,15 @@ jobs:
           END="${TARGET_DATE}T17:00:00"
 
           echo "Sending reservation for: $TARGET_DATE"
+          echo "areaId: $AREA_ID organizer: $ORGANIZER"
+
+          # multipart/form-data'yi curl -F otomatik doğru şekilde kurar (boundary dahil).
           curl -sS -i -X POST "$TARGET_URL" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Authorization: Bearer $BEARER_TOKEN" \
+            -H "Origin: https://amadeus.avuity.com" \
             -H "Referer: https://amadeus.avuity.com/VuSpace2/" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" \
             -F "areaId=$AREA_ID" \
             -F "dates[0][start]=$START" \
             -F "dates[0][end]=$END" \
