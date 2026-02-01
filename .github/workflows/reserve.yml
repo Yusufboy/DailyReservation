@@ -5,7 +5,7 @@ on:
     # TR: Pazartesi–Cuma 00:01
     # UTC: Pazar–Perşembe 21:01  (00:01 TR = 21:01 UTC önceki gün)
     - cron: "1 21 * * 0-4"
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 jobs:
   reserve:
