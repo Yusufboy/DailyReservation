@@ -23,7 +23,7 @@ jobs:
 
           TODAY_TR=$(TZ=Europe/Istanbul date +%F)
           TARGET_DATE=$(TZ=Europe/Istanbul date -d "$TODAY_TR + 7 days" +%F)
-          YEAR=$(echo "$TARGET_DATE" | cut -d- -f1)
+          YEAR="${TARGET_DATE:0:4}"
 
           echo "Today(TR):  $TODAY_TR"
           echo "Target day: $TARGET_DATE"
@@ -36,19 +36,11 @@ jobs:
             fi
           fi
 
-          # TR resmi tatil kontrolü (Nager.Date)
-          HOLIDAYS_JSON=$(curl -fsSL "https://date.nager.at/api/v3/PublicHolidays/$YEAR/TR" || true)
-
+          # TR resmi tatil kontrolü (Nager.Date) - jq ile
+          HOLIDAYS_JSON="$(curl -fsSL "https://date.nager.at/api/v3/PublicHolidays/$YEAR/TR" || true)"
           if [ -n "$HOLIDAYS_JSON" ]; then
-            RESULT=$(echo "$HOLIDAYS_JSON" | python3 - "$TARGET_DATE" <<'PY'
-import json, sys
-target = sys.argv[1]
-data = json.load(sys.stdin)
-dates = {x.get("date") for x in data if isinstance(x, dict)}
-print("HOLIDAY" if target in dates else "OK")
-PY
-)
-            if [ "$RESULT" = "HOLIDAY" ]; then
+            IS_HOLIDAY="$(echo "$HOLIDAYS_JSON" | jq -r --arg d "$TARGET_DATE" 'map(select(.date == $d)) | length')"
+            if [ "$IS_HOLIDAY" != "0" ]; then
               echo "Target date is a TR public holiday => skipping."
               exit 0
             fi
@@ -60,7 +52,6 @@ PY
           END="${TARGET_DATE}T17:00:00"
 
           echo "Sending reservation for: $TARGET_DATE"
-
           curl -sS -i -X POST "$TARGET_URL" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Authorization: Bearer $BEARER_TOKEN" \
