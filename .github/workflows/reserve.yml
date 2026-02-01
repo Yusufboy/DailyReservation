@@ -3,7 +3,7 @@ name: VuSpace Auto Reserve (Next Week)
 on:
   schedule:
     # TR: Pazartesi–Cuma 00:01
-    # UTC: Pazar–Perşembe 21:01  (00:01 TR = 21:01 UTC önceki gün)
+    # UTC: Pazar–Perşembe 21:01 (00:01 TR = 21:01 UTC önceki gün)
     - cron: "1 21 * * 0-4"
   workflow_dispatch:
 
@@ -17,22 +17,18 @@ jobs:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
           AREA_ID: ${{ secrets.AREA_ID }}
           ORGANIZER: ${{ secrets.ORGANIZER }}
-          # İsteğe bağlı: şirket/özel tatiller (virgülle): 2026-01-02,2026-02-10
           EXTRA_SKIP_DATES: ${{ secrets.EXTRA_SKIP_DATES }}
         run: |
           set -euo pipefail
 
-          # TR tarihini al
           TODAY_TR=$(TZ=Europe/Istanbul date +%F)
-
-          # +7 gün (ertesi hafta aynı gün)
           TARGET_DATE=$(TZ=Europe/Istanbul date -d "$TODAY_TR + 7 days" +%F)
           YEAR=$(echo "$TARGET_DATE" | cut -d- -f1)
 
           echo "Today(TR):  $TODAY_TR"
           echo "Target day: $TARGET_DATE"
 
-          # 1) Opsiyonel: ekstra skip listesi (şirket tatili vb.)
+          # Opsiyonel ekstra skip (şirket tatili vb.)
           if [ -n "${EXTRA_SKIP_DATES:-}" ]; then
             if echo ",$EXTRA_SKIP_DATES," | grep -q ",$TARGET_DATE,"; then
               echo "Target date is in EXTRA_SKIP_DATES => skipping."
@@ -40,20 +36,11 @@ jobs:
             fi
           fi
 
-          # 2) TR resmî tatil kontrolü (Nager.Date public API)
-          # Not: ofis tatilleri resmî tatilden farklıysa EXTRA_SKIP_DATES kullan.
+          # TR resmi tatil kontrolü (Nager.Date)
           HOLIDAYS_JSON=$(curl -fsSL "https://date.nager.at/api/v3/PublicHolidays/$YEAR/TR" || true)
 
           if [ -n "$HOLIDAYS_JSON" ]; then
-            if echo "$HOLIDAYS_JSON" | python3 - "$TARGET_DATE" <<'PY'
-import json, sys
-target = sys.argv[1]
-data = json.load(sys.stdin)
-dates = {x.get("date") for x in data if isinstance(x, dict)}
-print("HOLIDAY" if target in dates else "OK")
-PY
-            then
-              RESULT=$(echo "$HOLIDAYS_JSON" | python3 - "$TARGET_DATE" <<'PY'
+            RESULT=$(echo "$HOLIDAYS_JSON" | python3 - "$TARGET_DATE" <<'PY'
 import json, sys
 target = sys.argv[1]
 data = json.load(sys.stdin)
@@ -61,10 +48,9 @@ dates = {x.get("date") for x in data if isinstance(x, dict)}
 print("HOLIDAY" if target in dates else "OK")
 PY
 )
-              if [ "$RESULT" = "HOLIDAY" ]; then
-                echo "Target date is a TR public holiday => skipping."
-                exit 0
-              fi
+            if [ "$RESULT" = "HOLIDAY" ]; then
+              echo "Target date is a TR public holiday => skipping."
+              exit 0
             fi
           else
             echo "Warning: couldn't fetch holidays; continuing without holiday check."
@@ -74,6 +60,7 @@ PY
           END="${TARGET_DATE}T17:00:00"
 
           echo "Sending reservation for: $TARGET_DATE"
+
           curl -sS -i -X POST "$TARGET_URL" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Authorization: Bearer $BEARER_TOKEN" \
