@@ -1,24 +1,39 @@
 name: VuSpace Auto Reserve (Next Week)
-
 on:
   schedule:
-    # TR: Pazartesi–Cuma 00:01
-    # UTC: Pazar–Perşembe 21:01 (00:01 TR = 21:01 UTC önceki gün)
     - cron: "1 21 * * 0-4"
     - cron: "6 21 * * 0-4"
     - cron: "11 21 * * 0-4"
   workflow_dispatch:
 
 jobs:
-  reserve:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Build matrix from USERS secret
+        id: set-matrix
+        env:
+          USERS: ${{ secrets.USERS }}
+        run: |
+          # USERS secret'ını matrix formatına çevir
+          MATRIX=$(echo "$USERS" | jq -c '{include: .}')
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  reserve:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      fail-fast: false   # Bir kullanıcı başarısız olursa diğerleri devam etsin
     steps:
       - name: Reserve next week's same weekday (skip public holidays)
         env:
           TARGET_URL: ${{ secrets.TARGET_URL }}
-          BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
-          AREA_ID: ${{ secrets.AREA_ID }}
-          ORGANIZER: ${{ secrets.ORGANIZER }}
+          BEARER_TOKEN: ${{ matrix.bearer }}
+          AREA_ID: ${{ matrix.areaId }}
+          ORGANIZER: ${{ matrix.organizer }}
           EXTRA_SKIP_DATES: ${{ secrets.EXTRA_SKIP_DATES }}
         run: |
           set -euo pipefail
@@ -29,8 +44,10 @@ jobs:
 
           echo "Today(TR):  $TODAY_TR"
           echo "Target day: $TARGET_DATE"
+          echo "Organizer:  $ORGANIZER"
+          echo "Area ID:    $AREA_ID"
 
-          # Opsiyonel ekstra skip (şirket tatili vb.)
+          # Opsiyonel ekstra skip
           if [ -n "${EXTRA_SKIP_DATES:-}" ]; then
             if echo ",$EXTRA_SKIP_DATES," | grep -q ",$TARGET_DATE,"; then
               echo "Target date is in EXTRA_SKIP_DATES => skipping."
@@ -38,7 +55,7 @@ jobs:
             fi
           fi
 
-          # TR resmi tatil kontrolü (Nager.Date) - jq ile
+          # TR resmi tatil kontrolü
           HOLIDAYS_JSON="$(curl -fsSL "https://date.nager.at/api/v3/PublicHolidays/$YEAR/TR" || true)"
           if [ -n "$HOLIDAYS_JSON" ]; then
             IS_HOLIDAY="$(echo "$HOLIDAYS_JSON" | jq -r --arg d "$TARGET_DATE" 'map(select(.date == $d)) | length')"
@@ -54,9 +71,7 @@ jobs:
           END="${TARGET_DATE}T17:00:00"
 
           echo "Sending reservation for: $TARGET_DATE"
-          echo "areaId: $AREA_ID organizer: $ORGANIZER"
 
-          # multipart/form-data'yi curl -F otomatik doğru şekilde kurar (boundary dahil).
           curl -sS -i -X POST "$TARGET_URL" \
             -H "Accept: application/json, text/plain, */*" \
             -H "Authorization: Bearer $BEARER_TOKEN" \
