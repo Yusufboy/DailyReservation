@@ -45,8 +45,8 @@ jobs:
             echo "Warning: couldn't fetch holidays; continuing without holiday check."
           fi
 
-          START="${TARGET_DATE}T08:00:00"
-          END="${TARGET_DATE}T17:00:00"
+          START="${TARGET_DATE}T09:00:00"
+          END="${TARGET_DATE}T18:00:00"
 
           # Her kullanıcı için loop
           USER_COUNT=$(echo "$USERS" | jq 'length')
